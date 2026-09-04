@@ -4,18 +4,28 @@ import { StatCard } from "@/components/dashboard/StatCard";
 import { EnvironmentsModule } from "@/components/dashboard/EnvironmentsModule";
 import { PerformanceLabModule } from "@/components/dashboard/PerformanceLabModule";
 import { CodeRepoModule } from "@/components/dashboard/CodeRepoModule";
+import { SetupRequired } from "@/components/dashboard/SetupRequired";
 import { getEnvironments, getCommands, getStressTests, getSnippets } from "@/lib/data";
-import { hasDatabase } from "@/lib/db";
+import { hasDatabase, MissingTablesError } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [environments, commands, stressTests, snippets] = await Promise.all([
-    getEnvironments(),
-    getCommands(),
-    getStressTests(),
-    getSnippets(),
-  ]);
+  let environments, commands, stressTests, snippets;
+
+  try {
+    [environments, commands, stressTests, snippets] = await Promise.all([
+      getEnvironments(),
+      getCommands(),
+      getStressTests(),
+      getSnippets(),
+    ]);
+  } catch (error) {
+    if (error instanceof MissingTablesError) {
+      return <SetupRequired relation={error.relation} />;
+    }
+    throw error;
+  }
 
   const runningContainers = environments.filter((e) => e.status === "running").length;
   const totalRequests = stressTests.reduce((acc, t) => acc + t.request_volume, 0);

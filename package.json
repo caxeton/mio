@@ -4,6 +4,7 @@
   "private": true,
   "description": "Hub de Productividad para Desarrolladores - Dashboard estilo terminal para gestionar entornos Docker, pruebas de rendimiento de caché y snippets de código.",
   "scripts": {
+    "db:setup": "node scripts/setup-db.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -13,14 +14,17 @@
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
     "next": "14.2.35",
+    "pg": "^8.23.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/node": "^20.14.9",
+    "@types/pg": "^8.11.10",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.19",
+    "dotenv": "^17.4.2",
     "eslint": "^8.57.0",
     "eslint-config-next": "14.2.35",
     "postcss": "^8.4.39",

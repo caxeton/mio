@@ -1,15 +1,20 @@
 -- ============================================================================
 -- Hub de Productividad para Desarrolladores — Esquema de base de datos
 -- Motor objetivo: Neon (PostgreSQL serverless)
--- Ejecutar completo sobre una base vacía (psql, Neon SQL Editor, etc.)
+--
+-- Es seguro ejecutar este script varias veces: crea lo que falte y no
+-- duplica los datos de ejemplo.
+--
+-- Formas de ejecutarlo:
+--   1. npm run db:setup           (recomendada, no requiere psql)
+--   2. psql "$DATABASE_URL" -f sql/schema.sql
+--   3. Copiar/pegar en el SQL Editor de Neon
 -- ============================================================================
 
 BEGIN;
 
--- ----------------------------------------------------------------------------
--- Extensiones
--- ----------------------------------------------------------------------------
-CREATE EXTENSION IF NOT EXISTS "pgcrypto"; -- gen_random_uuid()
+-- Nota: gen_random_uuid() es nativo desde PostgreSQL 13, por lo que no se
+-- necesita la extensión pgcrypto.
 
 -- ----------------------------------------------------------------------------
 -- Tipos enumerados
@@ -193,6 +198,9 @@ CREATE TRIGGER trg_code_snippets_updated_at
 
 -- ============================================================================
 -- SEED DATA — datos de ejemplo para probar el esquema de inmediato
+--
+-- Cada bloque solo inserta si la tabla está vacía, así que volver a ejecutar
+-- este script no duplica filas ni falla.
 -- ============================================================================
 
 INSERT INTO snippet_categories (name, slug, color) VALUES
@@ -202,34 +210,48 @@ INSERT INTO snippet_categories (name, slug, color) VALUES
   ('Estructuras de Datos',  'estructuras-datos',   '#ff5f9e')
 ON CONFLICT (slug) DO NOTHING;
 
-INSERT INTO docker_environments (name, image, tag, ports, volumes, environment_vars, network, status, host_os, description) VALUES
-  (
-    'neon-local-postgres', 'postgres', '16-alpine',
-    '[{"host": 5432, "container": 5432, "protocol": "tcp"}]'::jsonb,
-    '[{"host": "./data/pg", "container": "/var/lib/postgresql/data", "mode": "rw"}]'::jsonb,
-    '{"POSTGRES_USER": "devhub", "POSTGRES_DB": "devhub"}'::jsonb,
-    'devhub_net', 'running', 'macos',
-    'Instancia local de Postgres para pruebas antes de desplegar en Neon.'
-  ),
-  (
-    'redis-cache-bench', 'redis', '7.2',
-    '[{"host": 6379, "container": 6379, "protocol": "tcp"}]'::jsonb,
-    '[{"host": "./data/redis", "container": "/data", "mode": "rw"}]'::jsonb,
-    '{}'::jsonb,
-    'devhub_net', 'running', 'windows11',
-    'Caché usada en el Laboratorio de Rendimiento para pruebas de hit rate.'
-  );
+DO $seed$ BEGIN
+IF NOT EXISTS (SELECT 1 FROM docker_environments) THEN
+  INSERT INTO docker_environments (name, image, tag, ports, volumes, environment_vars, network, status, host_os, description) VALUES
+    (
+      'neon-local-postgres', 'postgres', '16-alpine',
+      '[{"host": 5432, "container": 5432, "protocol": "tcp"}]'::jsonb,
+      '[{"host": "./data/pg", "container": "/var/lib/postgresql/data", "mode": "rw"}]'::jsonb,
+      '{"POSTGRES_USER": "devhub", "POSTGRES_DB": "devhub"}'::jsonb,
+      'devhub_net', 'running', 'macos',
+      'Instancia local de Postgres para pruebas antes de desplegar en Neon.'
+    ),
+    (
+      'redis-cache-bench', 'redis', '7.2',
+      '[{"host": 6379, "container": 6379, "protocol": "tcp"}]'::jsonb,
+      '[{"host": "./data/redis", "container": "/data", "mode": "rw"}]'::jsonb,
+      '{}'::jsonb,
+      'devhub_net', 'running', 'windows11',
+      'Caché usada en el Laboratorio de Rendimiento para pruebas de hit rate.'
+    );
+END IF;
+END $seed$;
 
-INSERT INTO terminal_commands (title, command, os_platform, shell, description, tags, is_favorite) VALUES
-  ('Listar contenedores activos', 'docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"', 'macos', 'zsh', 'Muestra los contenedores en ejecución con formato tabular.', ARRAY['docker','inspeccion'], true),
-  ('Listar contenedores activos (PowerShell)', 'docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"', 'windows11', 'powershell', 'Equivalente en PowerShell sobre Windows 11.', ARRAY['docker','inspeccion'], true),
-  ('Liberar puerto ocupado', 'lsof -ti tcp:3000 | xargs kill -9', 'macos', 'zsh', 'Mata el proceso que ocupa el puerto 3000.', ARRAY['red','debug'], false),
-  ('Liberar puerto ocupado (Windows)', 'Get-Process -Id (Get-NetTCPConnection -LocalPort 3000).OwningProcess | Stop-Process -Force', 'windows11', 'powershell', 'Equivalente en PowerShell para liberar el puerto 3000.', ARRAY['red','debug'], false);
+DO $seed$ BEGIN
+IF NOT EXISTS (SELECT 1 FROM terminal_commands) THEN
+  INSERT INTO terminal_commands (title, command, os_platform, shell, description, tags, is_favorite) VALUES
+    ('Listar contenedores activos', 'docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"', 'macos', 'zsh', 'Muestra los contenedores en ejecución con formato tabular.', ARRAY['docker','inspeccion'], true),
+    ('Listar contenedores activos (PowerShell)', 'docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"', 'windows11', 'powershell', 'Equivalente en PowerShell sobre Windows 11.', ARRAY['docker','inspeccion'], true),
+    ('Liberar puerto ocupado', 'lsof -ti tcp:3000 | xargs kill -9', 'macos', 'zsh', 'Mata el proceso que ocupa el puerto 3000.', ARRAY['red','debug'], false),
+    ('Liberar puerto ocupado (Windows)', 'Get-Process -Id (Get-NetTCPConnection -LocalPort 3000).OwningProcess | Stop-Process -Force', 'windows11', 'powershell', 'Equivalente en PowerShell para liberar el puerto 3000.', ARRAY['red','debug'], false);
+END IF;
+END $seed$;
 
-INSERT INTO stress_tests (name, target_url, request_volume, concurrency, distribution, zipf_exponent, cache_size, duration_ms, avg_latency_ms, p95_latency_ms, p99_latency_ms, cache_hits, cache_misses, cache_hit_rate, errors_count, notes) VALUES
-  ('Bench caché LRU - uniforme', 'http://localhost:8080/api/items', 10000, 50, 'uniform', NULL, 500, 42000, 4.821, 12.400, 21.900, 4102, 5898, 41.02, 0, 'Distribución uniforme genera baja tasa de aciertos con caché pequeña.'),
-  ('Bench caché LRU - zipf', 'http://localhost:8080/api/items', 10000, 50, 'zipf', 1.200, 500, 39500, 3.114, 9.200, 15.700, 8734, 1266, 87.34, 0, 'Distribución zipf concentra accesos en pocas claves, mejora el hit rate.');
+DO $seed$ BEGIN
+IF NOT EXISTS (SELECT 1 FROM stress_tests) THEN
+  INSERT INTO stress_tests (name, target_url, request_volume, concurrency, distribution, zipf_exponent, cache_size, duration_ms, avg_latency_ms, p95_latency_ms, p99_latency_ms, cache_hits, cache_misses, cache_hit_rate, errors_count, notes) VALUES
+    ('Bench caché LRU - uniforme', 'http://localhost:8080/api/items', 10000, 50, 'uniform', NULL, 500, 42000, 4.821, 12.400, 21.900, 4102, 5898, 41.02, 0, 'Distribución uniforme genera baja tasa de aciertos con caché pequeña.'),
+    ('Bench caché LRU - zipf', 'http://localhost:8080/api/items', 10000, 50, 'zipf', 1.200, 500, 39500, 3.114, 9.200, 15.700, 8734, 1266, 87.34, 0, 'Distribución zipf concentra accesos en pocas claves, mejora el hit rate.');
+END IF;
+END $seed$;
 
+DO $seed$ BEGIN
+IF NOT EXISTS (SELECT 1 FROM code_snippets) THEN
 INSERT INTO code_snippets (category_id, title, language, code, description, tags, uses_pthreads, complexity_notes, source_url)
 SELECT
   (SELECT id FROM snippet_categories WHERE slug = 'concurrencia'),
@@ -252,5 +274,7 @@ SELECT
   false,
   'Generación de claves O(n_keys) por muestreo ponderado; simulación O(n_requests * cache_size) en el peor caso.',
   NULL;
+END IF;
+END $seed$;
 
 COMMIT;
