@@ -234,7 +234,7 @@ INSERT INTO code_snippets (category_id, title, language, code, description, tags
 SELECT
   (SELECT id FROM snippet_categories WHERE slug = 'concurrencia'),
   'Productor-consumidor con pthreads',
-  'c',
+  'c'::snippet_language,
   E'#include <pthread.h>\n#include <stdio.h>\n\n#define BUF_SIZE 8\n\nstatic int buffer[BUF_SIZE];\nstatic int count = 0;\nstatic pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;\nstatic pthread_cond_t not_full = PTHREAD_COND_INITIALIZER;\nstatic pthread_cond_t not_empty = PTHREAD_COND_INITIALIZER;\n\nvoid produce(int item) {\n    pthread_mutex_lock(&lock);\n    while (count == BUF_SIZE) pthread_cond_wait(&not_full, &lock);\n    buffer[count++] = item;\n    pthread_cond_signal(&not_empty);\n    pthread_mutex_unlock(&lock);\n}\n\nint consume(void) {\n    pthread_mutex_lock(&lock);\n    while (count == 0) pthread_cond_wait(&not_empty, &lock);\n    int item = buffer[--count];\n    pthread_cond_signal(&not_full);\n    pthread_mutex_unlock(&lock);\n    return item;\n}',
   'Implementación clásica del problema productor-consumidor usando mutex y variables de condición POSIX.',
   ARRAY['pthreads','sincronizacion','c'],
@@ -245,7 +245,7 @@ UNION ALL
 SELECT
   (SELECT id FROM snippet_categories WHERE slug = 'algoritmos'),
   'Simulador de caché con distribución Zipf',
-  'python',
+  'python'::snippet_language,
   E'import random\n\ndef zipf_keys(n_requests: int, n_keys: int, exponent: float = 1.2) -> list[int]:\n    weights = [1 / (rank ** exponent) for rank in range(1, n_keys + 1)]\n    total = sum(weights)\n    probs = [w / total for w in weights]\n    return random.choices(range(n_keys), weights=probs, k=n_requests)\n\ndef simulate_cache_hit_rate(keys: list[int], cache_size: int) -> float:\n    cache: list[int] = []\n    hits = 0\n    for key in keys:\n        if key in cache:\n            hits += 1\n            cache.remove(key)\n        elif len(cache) >= cache_size:\n            cache.pop(0)\n        cache.append(key)\n    return hits / len(keys) * 100',
   'Genera claves siguiendo una distribución Zipf y mide el hit rate de una caché LRU simulada.',
   ARRAY['zipf','cache','simulacion'],
