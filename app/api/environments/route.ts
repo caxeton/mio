@@ -1,9 +1,8 @@
-import { NextResponse } from "next/server";
 import { getEnvironments } from "@/lib/data";
+import { respond } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const environments = await getEnvironments();
-  return NextResponse.json({ data: environments });
+  return respond(getEnvironments);
 }

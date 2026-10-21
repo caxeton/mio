@@ -1,14 +1,15 @@
-import { NextResponse } from "next/server";
 import { getCommands } from "@/lib/data";
+import { jsonError, respond } from "@/lib/api";
+import { OS_PLATFORMS, isOsPlatform } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const os = searchParams.get("os");
-
-  const commands = await getCommands();
-  const filtered = os ? commands.filter((c) => c.os_platform === os) : commands;
-
-  return NextResponse.json({ data: filtered });
+  const os = new URL(request.url).searchParams.get("os");
+  if (os !== null && !isOsPlatform(os)) {
+    return jsonError(400, `Parámetro "os" inválido: ${JSON.stringify(os)}.`, {
+      allowed: OS_PLATFORMS,
+    });
+  }
+  return respond(() => getCommands({ os: os ?? undefined }));
 }

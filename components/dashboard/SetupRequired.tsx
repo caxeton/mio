@@ -8,7 +8,7 @@ export function SetupRequired({ relation }: { relation?: string }) {
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-2xl rounded-lg border border-neon-amber/30 bg-carbon-900/70 p-6">
         <div className="mb-4 flex items-center gap-2.5">
-          <span className="h-2 w-2 rounded-full bg-neon-amber" />
+          <span aria-hidden className="h-2 w-2 rounded-full bg-neon-amber" />
           <h1 className="font-mono text-sm font-semibold uppercase tracking-wider text-neon-amber">
             Falta aplicar el esquema
           </h1>

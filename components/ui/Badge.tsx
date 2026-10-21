@@ -1,4 +1,6 @@
-type BadgeTone = "blue" | "green" | "amber" | "pink" | "red" | "violet" | "neutral";
+import type { ReactNode } from "react";
+
+export type BadgeTone = "blue" | "green" | "amber" | "pink" | "red" | "violet" | "neutral";
 
 const TONE_CLASSES: Record<BadgeTone, string> = {
   blue: "border-neon-blue/30 bg-neon-blue/10 text-neon-blue",
@@ -15,7 +17,7 @@ export function Badge({
   tone = "neutral",
   className = "",
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   tone?: BadgeTone;
   className?: string;
 }) {

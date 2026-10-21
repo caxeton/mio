@@ -228,25 +228,39 @@ IF NOT EXISTS (SELECT 1 FROM docker_environments) THEN
       '{}'::jsonb,
       'devhub_net', 'running', 'windows11',
       'Caché usada en el Laboratorio de Rendimiento para pruebas de hit rate.'
+    ),
+    (
+      'nginx-edge', 'nginx', '1.27-alpine',
+      '[{"host": 8080, "container": 80, "protocol": "tcp"}]'::jsonb,
+      '[{"host": "./nginx.conf", "container": "/etc/nginx/nginx.conf", "mode": "ro"}]'::jsonb,
+      '{}'::jsonb,
+      'devhub_net', 'stopped', 'linux',
+      'Proxy reverso para pruebas de carga contra el laboratorio.'
     );
 END IF;
 END $seed$;
 
-DO $seed$ BEGIN
+DO $seed$
+DECLARE
+  pg_env UUID := (SELECT id FROM docker_environments WHERE name = 'neon-local-postgres' LIMIT 1);
+BEGIN
 IF NOT EXISTS (SELECT 1 FROM terminal_commands) THEN
-  INSERT INTO terminal_commands (title, command, os_platform, shell, description, tags, is_favorite) VALUES
-    ('Listar contenedores activos', 'docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"', 'macos', 'zsh', 'Muestra los contenedores en ejecución con formato tabular.', ARRAY['docker','inspeccion'], true),
-    ('Listar contenedores activos (PowerShell)', 'docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"', 'windows11', 'powershell', 'Equivalente en PowerShell sobre Windows 11.', ARRAY['docker','inspeccion'], true),
-    ('Liberar puerto ocupado', 'lsof -ti tcp:3000 | xargs kill -9', 'macos', 'zsh', 'Mata el proceso que ocupa el puerto 3000.', ARRAY['red','debug'], false),
-    ('Liberar puerto ocupado (Windows)', 'Get-Process -Id (Get-NetTCPConnection -LocalPort 3000).OwningProcess | Stop-Process -Force', 'windows11', 'powershell', 'Equivalente en PowerShell para liberar el puerto 3000.', ARRAY['red','debug'], false);
+  INSERT INTO terminal_commands (environment_id, title, command, os_platform, shell, description, tags, is_favorite) VALUES
+    (pg_env, 'Listar contenedores activos', 'docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"', 'macos', 'zsh', 'Muestra los contenedores en ejecución con formato tabular.', ARRAY['docker','inspeccion'], true),
+    (pg_env, 'Listar contenedores activos (PowerShell)', 'docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"', 'windows11', 'powershell', 'Equivalente en PowerShell sobre Windows 11.', ARRAY['docker','inspeccion'], true),
+    (pg_env, 'Listar contenedores activos (Linux)', 'docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"', 'linux', 'bash', 'Mismo comando en bash sobre Linux.', ARRAY['docker','inspeccion'], false),
+    (NULL, 'Liberar puerto ocupado', 'lsof -ti tcp:3000 | xargs kill -9', 'macos', 'zsh', 'Mata el proceso que ocupa el puerto 3000.', ARRAY['red','debug'], false),
+    (NULL, 'Liberar puerto ocupado (Windows)', 'Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force }', 'windows11', 'powershell', 'Equivalente en PowerShell; no falla si el puerto ya está libre.', ARRAY['red','debug'], false),
+    (NULL, 'Liberar puerto ocupado (Linux)', 'fuser -k 3000/tcp', 'linux', 'bash', 'Equivalente en Linux usando fuser (paquete psmisc).', ARRAY['red','debug'], false);
 END IF;
 END $seed$;
 
 DO $seed$ BEGIN
 IF NOT EXISTS (SELECT 1 FROM stress_tests) THEN
-  INSERT INTO stress_tests (name, target_url, request_volume, concurrency, distribution, zipf_exponent, cache_size, duration_ms, avg_latency_ms, p95_latency_ms, p99_latency_ms, cache_hits, cache_misses, cache_hit_rate, errors_count, notes) VALUES
-    ('Bench caché LRU - uniforme', 'http://localhost:8080/api/items', 10000, 50, 'uniform', NULL, 500, 42000, 4.821, 12.400, 21.900, 4102, 5898, 41.02, 0, 'Distribución uniforme genera baja tasa de aciertos con caché pequeña.'),
-    ('Bench caché LRU - zipf', 'http://localhost:8080/api/items', 10000, 50, 'zipf', 1.200, 500, 39500, 3.114, 9.200, 15.700, 8734, 1266, 87.34, 0, 'Distribución zipf concentra accesos en pocas claves, mejora el hit rate.');
+  INSERT INTO stress_tests (name, target_url, request_volume, concurrency, distribution, zipf_exponent, cache_size, duration_ms, avg_latency_ms, p95_latency_ms, p99_latency_ms, cache_hits, cache_misses, cache_hit_rate, errors_count, notes, executed_at) VALUES
+    ('Bench caché LRU - uniforme', 'http://localhost:8080/api/items', 10000, 50, 'uniform', NULL, 500, 42000, 4.821, 12.400, 21.900, 4102, 5898, 41.02, 0, 'Distribución uniforme genera baja tasa de aciertos con caché pequeña.', '2026-09-01T16:00:00Z'),
+    ('Bench caché LRU - zipf', 'http://localhost:8080/api/items', 10000, 50, 'zipf', 1.200, 500, 39500, 3.114, 9.200, 15.700, 8734, 1266, 87.34, 0, 'Distribución zipf concentra accesos en pocas claves, mejora el hit rate.', '2026-09-02T10:30:00Z'),
+    ('Bench caché LRU - zipf agresivo', 'http://localhost:8080/api/items', 25000, 100, 'zipf', 1.800, 500, 51200, 2.400, 6.100, 10.300, 23875, 1125, 95.50, 2, 'Exponente alto concentra el 90% del tráfico en <5% de las claves.', '2026-09-03T21:10:00Z');
 END IF;
 END $seed$;
 
@@ -257,8 +271,8 @@ SELECT
   (SELECT id FROM snippet_categories WHERE slug = 'concurrencia'),
   'Productor-consumidor con pthreads',
   'c'::snippet_language,
-  E'#include <pthread.h>\n#include <stdio.h>\n\n#define BUF_SIZE 8\n\nstatic int buffer[BUF_SIZE];\nstatic int count = 0;\nstatic pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;\nstatic pthread_cond_t not_full = PTHREAD_COND_INITIALIZER;\nstatic pthread_cond_t not_empty = PTHREAD_COND_INITIALIZER;\n\nvoid produce(int item) {\n    pthread_mutex_lock(&lock);\n    while (count == BUF_SIZE) pthread_cond_wait(&not_full, &lock);\n    buffer[count++] = item;\n    pthread_cond_signal(&not_empty);\n    pthread_mutex_unlock(&lock);\n}\n\nint consume(void) {\n    pthread_mutex_lock(&lock);\n    while (count == 0) pthread_cond_wait(&not_empty, &lock);\n    int item = buffer[--count];\n    pthread_cond_signal(&not_full);\n    pthread_mutex_unlock(&lock);\n    return item;\n}',
-  'Implementación clásica del problema productor-consumidor usando mutex y variables de condición POSIX.',
+  E'#include <pthread.h>\n\n#define BUF_SIZE 8\n\n/* Buffer circular: el consumidor recibe los elementos en orden FIFO. */\nstatic int buffer[BUF_SIZE];\nstatic int head = 0;\nstatic int tail = 0;\nstatic int count = 0;\nstatic pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;\nstatic pthread_cond_t not_full = PTHREAD_COND_INITIALIZER;\nstatic pthread_cond_t not_empty = PTHREAD_COND_INITIALIZER;\n\nvoid produce(int item) {\n    pthread_mutex_lock(&lock);\n    while (count == BUF_SIZE) pthread_cond_wait(&not_full, &lock);\n    buffer[tail] = item;\n    tail = (tail + 1) % BUF_SIZE;\n    count++;\n    pthread_cond_signal(&not_empty);\n    pthread_mutex_unlock(&lock);\n}\n\nint consume(void) {\n    pthread_mutex_lock(&lock);\n    while (count == 0) pthread_cond_wait(&not_empty, &lock);\n    int item = buffer[head];\n    head = (head + 1) % BUF_SIZE;\n    count--;\n    pthread_cond_signal(&not_full);\n    pthread_mutex_unlock(&lock);\n    return item;\n}',
+  'Implementación clásica del problema productor-consumidor (cola FIFO acotada) usando mutex y variables de condición POSIX.',
   ARRAY['pthreads','sincronizacion','c'],
   true,
   'O(1) por operación; bloqueo con mutex + condvars evita busy-waiting.',
@@ -268,11 +282,22 @@ SELECT
   (SELECT id FROM snippet_categories WHERE slug = 'algoritmos'),
   'Simulador de caché con distribución Zipf',
   'python'::snippet_language,
-  E'import random\n\ndef zipf_keys(n_requests: int, n_keys: int, exponent: float = 1.2) -> list[int]:\n    weights = [1 / (rank ** exponent) for rank in range(1, n_keys + 1)]\n    total = sum(weights)\n    probs = [w / total for w in weights]\n    return random.choices(range(n_keys), weights=probs, k=n_requests)\n\ndef simulate_cache_hit_rate(keys: list[int], cache_size: int) -> float:\n    cache: list[int] = []\n    hits = 0\n    for key in keys:\n        if key in cache:\n            hits += 1\n            cache.remove(key)\n        elif len(cache) >= cache_size:\n            cache.pop(0)\n        cache.append(key)\n    return hits / len(keys) * 100',
+  E'import random\nfrom collections import OrderedDict\n\ndef zipf_keys(n_requests: int, n_keys: int, exponent: float = 1.2) -> list[int]:\n    # random.choices acepta pesos sin normalizar.\n    weights = [1 / (rank ** exponent) for rank in range(1, n_keys + 1)]\n    return random.choices(range(n_keys), weights=weights, k=n_requests)\n\ndef simulate_cache_hit_rate(keys: list[int], cache_size: int) -> float:\n    if not keys or cache_size <= 0:\n        return 0.0\n    cache: OrderedDict[int, None] = OrderedDict()\n    hits = 0\n    for key in keys:\n        if key in cache:\n            hits += 1\n            cache.move_to_end(key)\n        else:\n            if len(cache) >= cache_size:\n                cache.popitem(last=False)\n            cache[key] = None\n    return hits / len(keys) * 100',
   'Genera claves siguiendo una distribución Zipf y mide el hit rate de una caché LRU simulada.',
   ARRAY['zipf','cache','simulacion'],
   false,
-  'Generación de claves O(n_keys) por muestreo ponderado; simulación O(n_requests * cache_size) en el peor caso.',
+  'Generación O(n_keys + n_requests·log n_keys); simulación LRU O(n_requests) gracias a OrderedDict.',
+  NULL
+UNION ALL
+SELECT
+  (SELECT id FROM snippet_categories WHERE slug = 'devops'),
+  'Health-check de contenedores en bucle',
+  'bash'::snippet_language,
+  E'#!/usr/bin/env bash\nset -euo pipefail\n\ndocker ps --format ''{{.Names}}'' | while IFS= read -r name; do\n  status=$(docker inspect --format ''{{if .State.Health}}{{.State.Health.Status}}{{else}}sin healthcheck{{end}}'' "$name")\n  printf "%-24s %s\\n" "$name" "$status"\ndone',
+  'Recorre los contenedores activos e imprime su estado de healthcheck.',
+  ARRAY['docker','bash','monitoreo'],
+  false,
+  NULL,
   NULL;
 END IF;
 END $seed$;

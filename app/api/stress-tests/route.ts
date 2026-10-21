@@ -1,9 +1,8 @@
-import { NextResponse } from "next/server";
 import { getStressTests } from "@/lib/data";
+import { respond } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const tests = await getStressTests();
-  return NextResponse.json({ data: tests });
+  return respond(getStressTests);
 }

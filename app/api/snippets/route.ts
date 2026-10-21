@@ -1,14 +1,15 @@
-import { NextResponse } from "next/server";
 import { getSnippets } from "@/lib/data";
+import { jsonError, respond } from "@/lib/api";
+import { SNIPPET_LANGUAGES, isSnippetLanguage } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const language = searchParams.get("language");
-
-  const snippets = await getSnippets();
-  const filtered = language ? snippets.filter((s) => s.language === language) : snippets;
-
-  return NextResponse.json({ data: filtered });
+  const language = new URL(request.url).searchParams.get("language");
+  if (language !== null && !isSnippetLanguage(language)) {
+    return jsonError(400, `Parámetro "language" inválido: ${JSON.stringify(language)}.`, {
+      allowed: SNIPPET_LANGUAGES,
+    });
+  }
+  return respond(() => getSnippets({ language: language ?? undefined }));
 }

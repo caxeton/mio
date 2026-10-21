@@ -1,7 +1,6 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
-  darkMode: "class",
   content: [
     "./app/**/*.{ts,tsx}",
     "./components/**/*.{ts,tsx}",
@@ -35,6 +34,7 @@ const config: Config = {
       },
       fontFamily: {
         mono: [
+          "var(--font-mono)",
           "JetBrains Mono",
           "ui-monospace",
           "SFMono-Regular",
@@ -44,6 +44,7 @@ const config: Config = {
           "monospace",
         ],
         sans: [
+          "var(--font-sans)",
           "Inter",
           "ui-sans-serif",
           "system-ui",
@@ -57,24 +58,13 @@ const config: Config = {
         glow: "0 0 0 1px rgba(58, 212, 255, 0.15), 0 0 24px -8px rgba(58, 212, 255, 0.35)",
         "glow-green": "0 0 0 1px rgba(57, 255, 136, 0.15), 0 0 24px -8px rgba(57, 255, 136, 0.35)",
       },
-      backgroundImage: {
-        grid: "linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px)",
-      },
-      backgroundSize: {
-        grid: "24px 24px",
-      },
       animation: {
         blink: "blink 1.1s steps(1) infinite",
-        scan: "scan 6s linear infinite",
       },
       keyframes: {
         blink: {
           "0%, 49%": { opacity: "1" },
           "50%, 100%": { opacity: "0" },
-        },
-        scan: {
-          "0%": { backgroundPosition: "0 0" },
-          "100%": { backgroundPosition: "0 -400px" },
         },
       },
     },

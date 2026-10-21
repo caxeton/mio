@@ -1,3 +1,12 @@
+import type { ReactNode } from "react";
+
+const ACCENT_COLOR = {
+  blue: "bg-neon-blue",
+  green: "bg-neon-green",
+  amber: "bg-neon-amber",
+  pink: "bg-neon-pink",
+} as const;
+
 export function Panel({
   id,
   title,
@@ -9,27 +18,26 @@ export function Panel({
   id?: string;
   title: string;
   subtitle?: string;
-  accent?: "blue" | "green" | "amber" | "pink";
-  toolbar?: React.ReactNode;
-  children: React.ReactNode;
+  accent?: keyof typeof ACCENT_COLOR;
+  toolbar?: ReactNode;
+  children: ReactNode;
 }) {
-  const accentColor = {
-    blue: "bg-neon-blue",
-    green: "bg-neon-green",
-    amber: "bg-neon-amber",
-    pink: "bg-neon-pink",
-  }[accent];
+  const headingId = id ? `${id}-title` : undefined;
 
   return (
     <section
       id={id}
+      aria-labelledby={headingId}
       className="scroll-mt-20 rounded-lg border border-carbon-700 bg-carbon-900/60 shadow-[0_1px_0_rgba(255,255,255,0.02)_inset]"
     >
-      <header className="flex items-center justify-between gap-4 border-b border-carbon-700 px-4 py-3">
+      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-carbon-700 px-4 py-3">
         <div className="flex items-center gap-2.5">
-          <span className={`h-2 w-2 rounded-full ${accentColor} shadow-glow`} />
+          <span aria-hidden className={`h-2 w-2 rounded-full ${ACCENT_COLOR[accent]} shadow-glow`} />
           <div>
-            <h2 className="font-mono text-sm font-semibold uppercase tracking-wider text-carbon-100">
+            <h2
+              id={headingId}
+              className="font-mono text-sm font-semibold uppercase tracking-wider text-carbon-100"
+            >
               {title}
             </h2>
             {subtitle ? (

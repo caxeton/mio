@@ -60,7 +60,17 @@ function describeTarget(url) {
   }
 }
 
-const client = new pg.Client({ connectionString });
+const client = new pg.Client({ connectionString, connectionTimeoutMillis: 15_000 });
+
+// Al fallar la conexión, Node lanza un AggregateError (un intento por IPv4 y
+// otro por IPv6) cuyo `message` viene vacío; el detalle está en `errors`.
+function describeError(error) {
+  if (error?.message) return error.message;
+  if (Array.isArray(error?.errors) && error.errors.length) {
+    return error.errors.map((e) => e.message).join("; ");
+  }
+  return String(error?.code ?? error);
+}
 
 try {
   console.log(`${DIM}→ Conectando a ${describeTarget(connectionString)}...${RESET}`);
@@ -84,7 +94,7 @@ try {
   console.log(`Ya puedes levantar la app con:  ${YELLOW}npm run dev${RESET}\n`);
 } catch (error) {
   console.error(`\n${RED}✗ Falló la ejecución del esquema.${RESET}\n`);
-  console.error(`${RED}${error.message}${RESET}`);
+  console.error(`${RED}${describeError(error)}${RESET}`);
 
   if (error.position) {
     // Muestra la línea exacta del schema.sql donde está el problema.
@@ -95,7 +105,8 @@ try {
 
   const hints = {
     ENOTFOUND: "El host de la DATABASE_URL no existe. Revisa que copiaste bien la cadena de conexión desde Neon.",
-    ECONNREFUSED: "No se pudo conectar al servidor. Verifica que la base de datos esté activa en Neon.",
+    ECONNREFUSED:
+      "No se pudo conectar al servidor. Verifica que la base de datos esté activa (en Neon, o tu Postgres local con `npm run db:up`).",
     ETIMEDOUT: "Timeout de conexión. Revisa tu conexión a internet o si hay un firewall bloqueando.",
     "28P01": "Usuario o contraseña incorrectos en la DATABASE_URL.",
     "3D000": "La base de datos indicada en la DATABASE_URL no existe.",
