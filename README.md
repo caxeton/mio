@@ -5,15 +5,22 @@ nativo, grises carbón + acentos neón), para documentar entornos Docker,
 correr y registrar pruebas de rendimiento de caché, y mantener un repositorio
 de snippets de código.
 
+> El análisis del código, la lista de correcciones aplicadas y la hoja de ruta
+> pendiente están en [`PLAN_DE_MEJORA.md`](PLAN_DE_MEJORA.md).
+
 ## Stack
 
-- **Next.js 14** (App Router) + **TypeScript**
-- **Tailwind CSS** con tema personalizado (`carbon` / `neon`) — ver `tailwind.config.ts`
-- **Neon** (PostgreSQL serverless) vía `@neondatabase/serverless`
-- Tipografía monoespaciada para tablas, comandos y bloques de código
+- **Next.js 16** (App Router) + **React 19** + **TypeScript**
+- **Tailwind CSS 3.4** con tema personalizado (`carbon` / `neon`) — ver `tailwind.config.ts`
+- **PostgreSQL**: Neon (serverless) vía `@neondatabase/serverless`, o cualquier
+  Postgres vía `pg`
+- **Vitest** para tests, **ESLint 9** (flat config) para lint
+- Tipografías JetBrains Mono / Inter servidas con `next/font`
+
+Requiere **Node.js 22.12 o superior**.
 
 Si `DATABASE_URL` no está configurada, la app funciona igual usando datos de
-ejemplo en memoria (`lib/data.ts`), para poder revisar la interfaz sin una
+ejemplo en memoria (`lib/mock-data.ts`), para poder revisar la interfaz sin una
 base de datos real.
 
 ## Puesta en marcha
@@ -24,14 +31,16 @@ base de datos real.
    npm install
    ```
 
-2. Crear un proyecto en [Neon](https://console.neon.tech) y copiar la cadena de
-   conexión (botón **Connect**). Luego crear el archivo `.env`:
+2. Elegir una base de datos y crear el archivo `.env`:
 
    ```bash
    cp .env.example .env
    ```
 
-   y pegar la cadena en `DATABASE_URL`.
+   - **Neon**: crear un proyecto en [Neon](https://console.neon.tech), copiar
+     la cadena de conexión (botón **Connect**) y pegarla en `DATABASE_URL`.
+   - **Postgres local en Docker**: ejecutar `npm run db:up` y usar
+     `DATABASE_URL=postgres://devhub:devhub@localhost:5432/devhub`.
 
 3. Aplicar el esquema a la base de datos:
 
@@ -53,37 +62,79 @@ base de datos real.
    ```
 
    Abrir [http://localhost:3000](http://localhost:3000). En la barra superior
-   derecha, el indicador muestra `NEON::CONNECTED` cuando está leyendo de la
-   base de datos real, o `NEON::MOCK_DATA` cuando no hay `DATABASE_URL` y está
-   usando los datos de ejemplo en memoria.
+   derecha, el indicador muestra `NEON::CONNECTED` o `POSTGRES::CONNECTED`
+   según la base de datos, o `MOCK_DATA` cuando no hay `DATABASE_URL`.
 
    Si las tablas todavía no existen, la app no falla: muestra una pantalla
-   indicando que hay que ejecutar `npm run db:setup`.
+   indicando que hay que ejecutar `npm run db:setup`. Si la base de datos no
+   responde, muestra una pantalla de error con opción de reintentar.
+
+## Scripts
+
+| Script               | Qué hace                                                   |
+| -------------------- | ---------------------------------------------------------- |
+| `npm run dev`        | Servidor de desarrollo                                     |
+| `npm run build`      | Build de producción                                        |
+| `npm start`          | Sirve el build de producción                               |
+| `npm run db:up`      | Levanta Postgres local con Docker (`docker-compose.yml`)   |
+| `npm run db:setup`   | Aplica `sql/schema.sql` (idempotente)                      |
+| `npm run typecheck`  | Verificación de tipos con `tsc`                            |
+| `npm run lint`       | ESLint                                                     |
+| `npm test`           | Tests con Vitest                                           |
+| `npm run check`      | typecheck + lint + tests                                   |
+
+La CI (`.github/workflows/ci.yml`) ejecuta todo lo anterior, aplica el esquema
+dos veces contra un Postgres real y falla si hay vulnerabilidades altas en las
+dependencias de producción.
+
+## API
+
+Endpoints REST de solo lectura. Responden `{ "data": [...] }`, o
+`{ "error": "..." }` con el código HTTP correspondiente.
+
+| Endpoint                          | Filtros opcionales                         |
+| --------------------------------- | ------------------------------------------ |
+| `GET /api/environments`           | —                                          |
+| `GET /api/commands`               | `?os=windows11\|macos\|linux`              |
+| `GET /api/stress-tests`           | —                                          |
+| `GET /api/snippets`               | `?language=python\|c\|bash\|...`           |
+| `GET /api/health`                 | Estado y latencia de la base de datos      |
+
+Un filtro con un valor no válido responde `400` con la lista de valores
+permitidos; si falta el esquema, `503`.
 
 ## Base de datos soportada
 
-La capa de acceso (`lib/db.ts`) detecta automáticamente el destino:
+La capa de acceso (`lib/db.ts`) detecta automáticamente el destino según el
+hostname de `DATABASE_URL`:
 
 - `*.neon.tech` → usa el driver HTTP de `@neondatabase/serverless` (recomendado
   para despliegues serverless).
 - Cualquier otro Postgres (por ejemplo uno local en Docker) → usa el driver
-  `pg` estándar.
+  `pg` estándar. El SSL se configura con `sslmode` en la URL.
 
-Esto permite desarrollar contra un Postgres local y desplegar contra Neon sin
-cambiar código.
+Todas las consultas son parametrizadas (`$1`, `$2`, ...) y los filtros se
+aplican en SQL.
 
 ## Estructura
 
 ```
-sql/schema.sql              Esquema completo, idempotente, listo para Neon
+sql/schema.sql              Esquema completo, idempotente, con datos de ejemplo
 scripts/setup-db.mjs        Aplica el esquema sin necesidad de psql
+docker-compose.yml          Postgres local para desarrollo
 lib/db.ts                   Conexión (Neon HTTP o pg) + MissingTablesError
-lib/data.ts                 Fetchers, normalización de tipos y datos de ejemplo
-lib/types.ts                Tipos TypeScript alineados al esquema SQL
+lib/data.ts                 Fetchers y normalización de tipos
+lib/mock-data.ts            Datos de ejemplo (idénticos al seed SQL)
+lib/stats.ts                Cálculos del dashboard (hit rate ponderado, etc.)
+lib/api.ts                  Respuestas y manejo de errores de la API
+lib/types.ts                Tipos y enums alineados al esquema SQL
 app/page.tsx                Dashboard principal (Overview + 3 módulos)
-app/api/*/route.ts          Endpoints REST de solo lectura por módulo
-components/layout/          Sidebar y barra superior tipo terminal
+app/error.tsx, loading.tsx  Pantallas de error y de carga
+app/api/*/route.ts          Endpoints REST de solo lectura
+components/layout/          Sidebar, navegación móvil y barra superior
 components/dashboard/       Los tres módulos core del panel
+components/ui/              Panel, Badge, FilterChip, CopyButton
+tests/                      Tests de Vitest
 ```
 
 ### Nota sobre tipos numéricos
@@ -97,10 +148,11 @@ fallarían y los promedios concatenarían texto en vez de sumar.
 
 1. **Gestor de Entornos** — tabla `docker_environments` (imagen, puertos,
    volúmenes, estado) y `terminal_commands`, filtrable por sistema operativo
-   (Windows 11 / macOS / Linux).
+   (Windows 11 / macOS / Linux), con botón para copiar cada comando.
 2. **Laboratorio de Rendimiento** — `stress_tests`: volumen de peticiones,
-   concurrencia, distribución (`uniform`, `zipf`, ...) y resultados de hit
-   rate de caché, con detalle opcional en `stress_test_samples`.
+   concurrencia, distribución (`uniform`, `zipf`, ...), latencias, errores y
+   hit rate de caché (el global se pondera por volumen de peticiones), con
+   detalle opcional en `stress_test_samples`.
 3. **Repositorio de Código** — `code_snippets` categorizados
    (`snippet_categories`), desde rutinas en Python hasta implementaciones en C
-   con hilos POSIX (`uses_pthreads`).
+   con hilos POSIX (`uses_pthreads`), con búsqueda y botón de copiar.
